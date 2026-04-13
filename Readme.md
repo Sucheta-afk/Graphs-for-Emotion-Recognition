@@ -1,440 +1,148 @@
-# GraphMamba-Based Multimodal Emotion Recognition
+# Graph-Based Multi-Band EEG Emotion Recognition with Gradient Reversal Domain Adaptation
+
+> Subject-independent emotion recognition from EEG using Graph Attention Networks and domain adversarial learning.
+
+---
 
 ## Overview
 
-This project extends the research presented in the paper:
-
-**“Enhancing Emotion Recognition through Multi-Modal Data Fusion and Graph Neural Networks.”**
-
-The base paper proposes a **Graph Neural Network (GNN)** that combines **EEG signals, facial expressions, and physiological signals** for emotion classification. While the approach demonstrates strong results, several methodological limitations remain, particularly in modeling **temporal dependencies and richer graph structures**.
-
-This project proposes a **GraphMamba-based multimodal architecture** that improves upon the base model by introducing:
-
-* **Long-range temporal dependency modeling**
-* **Spatial EEG electrode graphs**
-* **Dynamic graph connectivity**
-* **Advanced multimodal fusion mechanisms**
-
-The goal is to develop a **spatiotemporal multimodal emotion recognition system** capable of capturing complex relationships between brain activity, physiological responses, and visual emotional cues.
+This project tackles **subject-independent EEG-based emotion recognition** — the ability to classify emotional states (e.g. valence/arousal) for a completely new user without any retraining. Most prior work trains and tests on the same individual; this framework generalises across subjects using graph-structured neural networks and adversarial domain adaptation.
 
 ---
 
-# Motivation
+## Primary Objective
 
-Emotion recognition from physiological signals is inherently **spatiotemporal and multimodal**:
-
-* **EEG signals** encode brain activity across spatially distributed electrodes.
-* **Physiological signals** reflect autonomic nervous system responses.
-* **Facial expressions** capture observable emotional cues.
-
-Traditional multimodal GNN systems treat modalities as **static nodes**, which ignores:
-
-* temporal dependencies in signals
-* spatial structure in EEG electrodes
-* dynamic interactions between modalities
-
-To address these limitations, this project introduces **GraphMamba**, a model that combines:
-
-* graph neural networks for **spatial modeling**
-* selective state space models (Mamba) for **long-range temporal modeling**
+Learn a subject-invariant feature representation such that emotion classifiers trained on a source population transfer directly to unseen subjects. This is achieved by combining a **Graph Attention Network (GAT)** for EEG channel modelling with a **Gradient Reversal Layer (GRL)** that enforces domain-agnostic representations.
 
 ---
 
-# Base Paper Summary
+## Why Graphs Over CNNs?
 
-The base system models multimodal emotion recognition using a **3-node graph**, where each node corresponds to a modality:
+### 1. Functional Connectivity Modelling
+Graphs allow explicit edges between EEG channels/electrodes, encoding actual functional connectivity (PLV) rather than treating channels as a fixed 1-D or 2-D grid.
 
-```
-Node 1 → EEG
-Node 2 → Facial Expressions
-Node 3 → Physiological Signals
-```
-
-Pipeline:
-
-```
-Multimodal Input
-      ↓
-Feature Extraction
-      ↓
-Graph Construction
-      ↓
-Graph Convolution Layers
-      ↓
-Feature Fusion
-      ↓
-Emotion Classification
-```
-
-Reported performance:
-
-| Model        | Accuracy   |
-| ------------ | ---------- |
-| SVM          | 83.25%     |
-| CNN          | 87.25%     |
-| RNN          | 85.00%     |
-| Proposed GNN | **91.25%** |
-
-While effective, this architecture simplifies several aspects of multimodal learning.
+### 2. Interpretability
+CNNs are often black boxes. Graph attention weights highlight which electrodes and edges drove a given classification — directly useful for clinical applications (e.g. identifying which regions are salient for "angry" vs "neutral").
 
 ---
 
-# Limitations of the Base Paper
-
-The following limitations motivate the improvements introduced in this project.
-
-## 1. Lack of Temporal Modeling
-
-EEG and physiological signals are **time-series signals**, but the base model treats modalities as **static feature vectors**.
-
-This prevents the model from learning:
-
-* temporal emotional dynamics
-* long-range dependencies
-* temporal correlations across modalities
-
-### Solution
-
-GraphMamba introduces **state-space sequence modeling** to capture temporal dependencies across signal windows.
-
----
-
-## 2. Oversimplified Graph Structure
-
-The base model represents each modality as **one node**, resulting in a graph with only **three nodes**.
+## Processing Pipeline
 
 ```
-EEG  ─── Facial
-  │
-Physiological
-```
-
-However, EEG signals contain **rich spatial structure across electrodes**.
-
-### Solution
-
-EEG signals are represented as a **brain connectivity graph**, where:
-
-* nodes = EEG electrodes
-* edges = spatial or functional relationships
-
-Example EEG graph:
-
-```
-Fp1 — F3 — C3
- |     |
-Fp2 — F4 — C4
-```
-
-This enables the model to capture **interactions between brain regions**.
-
----
-
-## 3. Static Adjacency Matrix
-
-The base paper constructs edges using a **similarity function between modality features**.
-
-```
-A_ij = similarity(F_i , F_j)
-```
-
-This results in a **static graph structure** that cannot adapt during training.
-
-### Solution
-
-This project introduces **learnable dynamic adjacency matrices** that allow the model to learn optimal relationships between modalities and EEG electrodes.
-
----
-
-## 4. Handcrafted Feature Extraction
-
-The base approach relies heavily on manually engineered features such as:
-
-* entropy
-* asymmetry
-* signal connectivity
-* Fourier features
-
-While useful, handcrafted features can limit representation learning.
-
-### Solution
-
-The proposed architecture allows **end-to-end feature learning** directly from signal representations.
-
-Possible inputs include:
-
-* raw EEG signals
-* spectral representations
-* learned embeddings
-
----
-
-## 5. Simple Fusion Strategy
-
-The base model performs fusion via **feature concatenation**:
-
-```
-h_fusion = [h_EEG, h_Facial, h_Physiological]
-```
-
-This does not explicitly model interactions between modalities.
-
-### Solution
-
-This project explores **advanced multimodal fusion mechanisms**, such as:
-
-* cross-modal attention
-* gated multimodal fusion
-* transformer-based fusion
-
----
-
-# Proposed Method
-
-The proposed architecture introduces **GraphMamba-based multimodal learning**.
-
-## Overall Architecture
-
-```
-EEG Signals (Electrode Graph)
-        ↓
-GraphMamba Encoder
-        ↓
-EEG Representation
-```
-
-```
-Physiological Signals
-        ↓
-Temporal Encoder
-        ↓
-Physiological Representation
-```
-
-```
-Facial Expression Features
-        ↓
-Visual Encoder
-        ↓
-Facial Representation
-```
-
-Fusion:
-
-```
-EEG Representation
-        +
-Physiological Representation
-        +
-Facial Representation
-        ↓
-Cross-Modal Fusion Layer
-        ↓
-Emotion Classification
+Raw EEG
+  └─→ Band Filtering (δ, θ, α, β, γ)
+        └─→ Feature Extraction (PSD)
+              └─→ PLV Graph Construction
+                    └─→ GAT
+                          └─→ GRL (Domain Adaptation)
+                                └─→ Emotion Classification
+                                      └─→ LOSO Evaluation + Visualisation
 ```
 
 ---
 
-# Modalities Used
+## Graph Modelling
 
-## EEG Modality
+| Element | Description |
+|---------|-------------|
+| **Nodes** | EEG channels (electrodes). Each node encodes per-band Power Spectral Density (PSD) features. |
+| **Edges** | Phase Locking Value (PLV) between each electrode pair, representing functional connectivity. |
+| **Multi-graph** | One graph is constructed per frequency band — five graphs per trial total. |
 
-EEG signals measure electrical activity in the brain using scalp electrodes.
+### Frequency Bands
 
-Properties:
-
-| Property      | Value       |
-| ------------- | ----------- |
-| Channels      | 32          |
-| Sampling Rate | 128 Hz      |
-| Signal Type   | Time-series |
-
-EEG electrodes form a **graph structure**, enabling spatial modeling of brain activity.
-
----
-
-## Physiological Signals
-
-Peripheral physiological signals capture **autonomic responses** to emotional stimuli.
-
-Signals include:
-
-* Galvanic Skin Response (GSR)
-* Blood Volume Pulse (BVP)
-* Respiration
-* Skin Temperature
-* Electromyogram (EMG)
-* Electrooculogram (EOG)
-
-These signals are highly correlated with **emotional arousal**.
+| Band | Symbol |
+|------|--------|
+| Delta | δ |
+| Theta | θ |
+| Alpha | α |
+| Beta | β |
+| Gamma | γ |
 
 ---
 
-## Facial Expression Modality
+## Phase Locking Value (PLV)
 
-Facial expressions provide **observable emotional cues**.
-
-Typical features:
-
-* facial landmarks
-* emotion probability vectors
-* visual embeddings from video frames
-
-These features complement physiological signals by capturing **external emotional expressions**.
-
----
-
-# Data Processing Pipeline
-
-## Step 1 — Signal Filtering
-
-EEG signals are filtered to remove noise.
-
-Typical bandpass filter:
+PLV measures whether two brain regions oscillate in synchrony. Raw amplitude is too noisy across trials and subjects; phase is more stable. PLV is computed via the **Hilbert Transform**:
 
 ```
-0.5 – 45 Hz
+PLV = | (1/N) · Σ e^(i(φ₁(t) − φ₂(t))) |
 ```
 
+where:
+- `φ₁(t)` and `φ₂(t)` are the instantaneous phases of two channels at time `t`
+- `N` is the number of time points
+- A PLV close to **1** indicates strong phase synchrony
+- A PLV close to **0** indicates no consistent phase relationship
+
+> Using phase rather than raw amplitude makes the connectivity estimate far more stable across subjects and trials.
+
 ---
 
-## Step 2 — Window Segmentation
+## Gradient Reversal Layer (GRL) / Domain Adaptation
 
-Each trial is segmented into temporal windows.
+The GRL enforces **subject-invariant features** by adversarially confusing a domain classifier (subject identity) while training the emotion classifier normally.
 
-Example:
+### How It Works
+
+| Pass | Behaviour |
+|------|-----------|
+| **Forward pass** | Identity function — passes activations through unchanged. |
+| **Backward pass** | Negates and scales the gradient, forcing the network to unlearn subject-specific patterns. |
+
+### Gradient Reversal Formula
 
 ```
-63-second trial
-↓
-3-second windows
-↓
-~21 windows per trial
+∂L/∂x  →  −λ · ∂L/∂x
 ```
 
-This increases the number of training samples.
+The domain loss gradient is reversed by factor `λ` before backpropagation through the shared encoder.
+
+### Dual-Head Architecture
+
+The network uses a shared encoder with two prediction heads:
+
+- **Emotion head** — predicts the emotional state label (trained normally).
+- **Domain head** — predicts subject identity (trained adversarially via GRL).
 
 ---
 
-## Step 3 — Graph Construction
+## Research Directions
 
-For EEG signals:
-
-```
-Nodes → electrodes
-Edges → spatial distance or functional connectivity
-```
-
-This creates a **brain connectivity graph**.
+| Direction | Status |
+|-----------|--------|
+| Multi-band EEG | ✅ Included |
+| Cross-band attention | ❌ Excluded |
+| Contrastive learning | ❌ Excluded |
+| Domain-adversarial learning (GRL) | ✅ Included |
 
 ---
 
-## Step 4 — Feature Encoding
+## Evaluation
 
-Each modality is encoded using a specialized encoder:
+The system is evaluated using **Leave One Subject Out (LOSO)** cross-validation:
 
-| Modality      | Encoder                  |
-| ------------- | ------------------------ |
-| EEG           | GraphMamba               |
-| Physiological | Temporal encoder         |
-| Facial        | CNN / Vision Transformer |
+- The model is trained on all subjects except one, which is held out entirely as the test set.
+- This directly measures subject-independent generalisation performance.
+- Results are accompanied by **attention-weight visualisations** showing which electrodes and connectivity edges were most salient per emotion class.
 
 ---
 
-## Step 5 — Multimodal Fusion
+## Acronyms
 
-Encoded modality representations are fused using cross-modal attention.
-
----
-
-## Step 6 — Emotion Classification
-
-The fused representation is passed through a classifier to predict emotional states.
-
-Possible classes:
-
-* Happy
-* Sad
-* Angry
-* Neutral
-
-Or binary labels such as **high/low valence** and **high/low arousal**.
+| Acronym | Full Form |
+|---------|-----------|
+| **GAT** | Graph Attention Network |
+| **GRL** | Gradient Reversal Layer |
+| **PLV** | Phase Locking Value |
+| **PSD** | Power Spectral Density |
+| **LOSO** | Leave One Subject Out |
+| **EEG** | Electroencephalography |
 
 ---
 
-# Expected Contributions
+## Notes
 
-This project introduces several improvements over the baseline model.
-
-| Base Paper                   | Proposed System                |
-| ---------------------------- | ------------------------------ |
-| 3-node modality graph        | EEG electrode graph            |
-| Static GNN                   | GraphMamba architecture        |
-| No temporal modeling         | Long-range sequence modeling   |
-| Static adjacency matrix      | Learnable dynamic connectivity |
-| Feature concatenation fusion | Cross-modal attention fusion   |
-
-These improvements enable the model to capture **spatial, temporal, and multimodal relationships more effectively**.
-
----
-
-# Technologies
-
-Suggested implementation stack:
-
-* Python
-* PyTorch
-* PyTorch Geometric
-* MNE (EEG processing)
-* NumPy / SciPy
-
----
-
-# Project Structure
-
-```
-project/
-│
-├── data/
-│   ├── raw_deap/
-│   └── processed/
-│
-├── preprocessing/
-│   ├── eeg_processing.py
-│   ├── physio_processing.py
-│   └── video_processing.py
-│
-├── graphs/
-│   └── eeg_graph_builder.py
-│
-├── models/
-│   ├── graphmamba_encoder.py
-│   ├── physio_encoder.py
-│   ├── facial_encoder.py
-│   └── fusion_model.py
-│
-├── training/
-│   └── train.py
-│
-└── README.md
-```
-
----
-
-# Future Work
-
-Potential extensions include:
-
-* self-supervised EEG pretraining
-* dynamic graph connectivity learning
-* cross-dataset generalization
-* real-time emotion recognition systems
-* brain-computer interface applications
-
----
-
-# References
-
-* DEAP: Dataset for Emotion Analysis using Physiological Signals
-* GraphMamba: Graph Neural Networks with Selective State Space Models
-* Multimodal Emotion Recognition Literature
+- One PLV graph is built per frequency band: `(δ, θ, α, β, γ)`
+- The Hilbert Transform is used to extract instantaneous phase for PLV computation
+- The GRL enables learning of subject-invariant (domain-agnostic) features without any target-subject labels at test time
